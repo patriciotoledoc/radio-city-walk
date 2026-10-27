@@ -9,6 +9,8 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#07080b">
 <meta name="mobile-web-app-capable" content="yes">
+<!-- SomaFM rechaza el audio si se envía la página de origen; el video de YouTube lleva su propia política -->
+<meta name="referrer" content="no-referrer">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500&family=Karla:wght@400;600&display=swap">
 <style>
@@ -45,7 +47,15 @@ html,body{height:100%;margin:0;background:#07080b;color:var(--ink);font-family:v
 
 .dock{position:fixed;left:max(20px,env(safe-area-inset-left,0px));bottom:max(20px,env(safe-area-inset-bottom,0px));z-index:3;
   width:min(460px,calc(100vw - 40px));display:grid;gap:12px;transition:opacity .6s}
-body.idle .dock,body.idle .top,body.idle .tools{opacity:0}
+body.idle .dock,body.idle .top,body.idle .tools{opacity:0;pointer-events:none}
+/* Línea mínima visible con los controles ocultos */
+.ticker{position:fixed;left:max(20px,env(safe-area-inset-left,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));z-index:3;
+  display:flex;align-items:center;gap:10px;max-width:min(70vw,640px);padding:7px 12px;border-radius:4px;
+  background:rgba(7,8,11,.55);font-family:var(--mono);font-size:13px;color:var(--ink);
+  opacity:0;pointer-events:none;transition:opacity .6s}
+.ticker b{font-weight:500;color:var(--sodium);white-space:nowrap}
+.ticker span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+body.idle.on .ticker{opacity:1}
 body.idle{cursor:none}
 
 .radio{background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:6px;padding:16px 18px;display:grid;gap:12px}
@@ -130,6 +140,7 @@ body.idle .tapzone{display:block}
       <input type="range" class="vol" id="vol" min="0" max="1" step="0.01" value="0.8" aria-label="Volumen">
     </div>
     <div class="dial" id="dial"></div>
+    <div id="ytAudioWrap" style="position:fixed;width:240px;height:180px;left:-400px;top:0;opacity:0;pointer-events:none" aria-hidden="true"></div>
   </div>
 
   <details class="walk" id="walkPanel">
@@ -150,19 +161,22 @@ body.idle .tapzone{display:block}
 </section>
 
 <div class="tools">
+  <button id="hideBtn">Ocultar controles</button>
   <button id="fsBtn">Pantalla completa</button>
 </div>
 <div class="tapzone" id="tapzone" aria-hidden="true"></div>
+<div class="ticker" id="ticker" aria-live="polite"><b id="tkStation"></b><span id="tkSong"></span></div>
 
 <audio id="audio" preload="none"></audio>
 
 <script>
 const STATIONS = [
-  {id:"indiepop", name:"Indie Pop Rocks", tag:"SomaFM", url:"https://ice1.somafm.com/indiepop-128-mp3", soma:"indiepop"},
-  {id:"bagel",    name:"BAGeL Radio",     tag:"SomaFM", url:"https://ice1.somafm.com/bagel-128-mp3",    soma:"bagel"},
+  {id:"indiepop", name:"Indie Pop Rocks", tag:"SomaFM", url:"https://ice6.somafm.com/indiepop-128-mp3", soma:"indiepop"},
+  {id:"current",  name:"The Current",     tag:"Minneapolis", url:"https://current.stream.publicradio.org/current.mp3"},
   {id:"kexp",     name:"KEXP Seattle",    tag:"KEXP",   url:"https://kexp.streamguys1.com/kexp160.aac"},
   {id:"rp",       name:"Radio Paradise Rock", tag:"RP", url:"https://stream.radioparadise.com/rock-192"},
-  {id:"fiprock",  name:"FIP Rock",        tag:"Radio France", url:"https://icecast.radiofrance.fr/fiprock-midfi.mp3"}
+  {id:"fiprock",  name:"FIP Rock",        tag:"Radio France", url:"https://icecast.radiofrance.fr/fiprock-midfi.mp3"},
+  {id:"birp",     name:"BIRP! Octubre 2026", tag:"BIRP.fm", yt:true}
 ];
 
 const $ = id => document.getElementById(id);
@@ -182,7 +196,7 @@ function renderDial(){
     const b = document.createElement("button");
     b.className = "chip"; b.textContent = s.name;
     b.setAttribute("aria-pressed", s.id===current.id);
-    b.onclick = ()=>tune(s, !audio.paused || audio.dataset.wanted==="1");
+    b.onclick = ()=>tune(s, isPlaying() || audio.dataset.wanted==="1");
     $("dial").appendChild(b);
   });
   $("stationName").textContent = current.name;
@@ -195,9 +209,45 @@ function setPlayingUI(on){
   $("playBtn").setAttribute("aria-label", on ? "Pausar" : "Reproducir");
 }
 
+/* ---------- BIRP.fm: lista del mes, reproducida desde YouTube ---------- */
+/* [artista, canción, videoId] — fuente: birp.fm/playlist/2026/october-2026 */
+const BIRP = [["Alex Izenberg", "Old Gold", "562NUG6Y--c"], ["Sam and Louise Sullivan", "My Guy", "PqTql73kLAQ"], ["Palace", "Brown Bread", "TJ_mx0t9cho"], ["Rubber Band Gun", "Carlo", "baynrbnLU58"], ["Blood Cultures, Jordana", "Set it on Fire (Jordana's Version)", "0Aifgs_1JIc"], ["Land of Talk", "4:44", "C7C8o0weAeU"], ["Sam and Louise Sullivan", "After All These Years", "rxcYx1vDkCo"], ["San Gabriel", "All My Time", "0Txaa4JO-BI"], ["Telegraph Hill", "Angelique", "Pbpy1budlzU"], ["Weaver", "Around the Bend", "JDqS96EoXRk"], ["Starwolf", "Back It Up", "yuQNAX3XItA"], ["The Moving Stills", "Benefit", "nN0sU5C7Ge0"], ["Chelsea Days", "Bittersweet", "cQoock33M-U"], ["Pom Femme", "Black Sun White Noise", "14qbsqxNTq8"], ["Spiral XP", "Blue Earth", "eCgGIt698C4"], ["Alex Izenberg", "Boy, You'll Be a Woman Soon", "4zufRa1mGfw"], ["Kevin Herig", "Breakers", "Sl5jfaDEbJ4"], ["Simon Joan", "Break Up", "UofHkZ2ahgY"], ["Virgo Rising", "Bug on Me", "SkwwHB4Thbg"], ["Vlad Holiday", "By Myself", "63HaA0wl-ro"], ["Night Cap, slenderbodies", "Can't Get Enough", "-jyIbFa6jFs"], ["Sour Widows", "Choke Chain", "d79V1cM0YM8"], ["The Sewing Club", "Complicated", "jsQTTYKKoY0"], ["Aaron Joseph Russo", "c o u l d i t b e ?", "j0RSeSh0ZQk"], ["Pool Girl", "Crab", "75meZJaJdjU"], ["Munan", "Disco In My Room", "yc7HBy0icBQ"], ["Glom", "Dollars", "0gD-vVz9cu8"], ["Sarah Meth", "Don't touch me you're my hero", "0tCL7kfaaD4"], ["Horsepower", "Do you think you can live without dying every day?", "P_rC28-VVOA"], ["Palo Sopraño", "dream", "ASZKTimIDtM"], ["Strawberry Hands", "Dream of Water", "vT0vOkdmgDQ"], ["Chelsea Days", "Drexel", "SR4V20eKvpU"], ["Anjoli Simone", "Easy Money", "tYtiIlyQafQ"], ["MX LONELY, Caitlin Starr", "Ex Rae Punk", "7LCvWGQrI4k"], ["Peli Gene", "Fall", "SC_vBdbEiTc"], ["Salarymen", "The Fast Lane", "Sb-ht0_qFxU"], ["Yellow House", "Fault Lines", "xjlfhEKABl0"], ["Stray Fossa, Phantom Youth", "Faye's Out", "bT2Br4jwmZw"], ["maxime.", "fear of missing out", "7IZwWihw1fU"], ["Stevedreez", "FEEDBACK", "5BMewb_qim8"], ["Mono Mochi", "Fields At Dawn", "QqjDY4OSM-I"], ["Finnish Postcard", "Fields of When", "m7tOqtbRHZI"], ["Dogs on Shady Lane", "Find You", "HPTHVV_-tn4"], ["Nick Waters", "Flies", "2koQjvYGw2k"], ["Secret Bad Boy, Woody Goss", "Flounder Fish", "i7HXcI7tsiw"], ["mokina", "Fool", "DBufsG7s4k0"], ["Phantom Handshakes", "From The Side", "fFNycPhswJw"], ["sunhertz", "further up", "MNUv2tLGmvs"], ["Ganser", "Futuretripping", "Y4hejqKnrI4"], ["Sandhouse", "Gasoline", "YgCTbtRmxhA"], ["Grand Rivage", "Glass House", "p4SokDxlTFM"], ["Holy Motors", "God Is A Feeling", "IxTzypPRhNY"], ["Just Penelope", "Great Lake", "2csPRnrjK2I"], ["Ellie August", "Growing", "ONujCaEhPvQ"], ["John-Lewis Anderson", "HAGS", "JqVhqGRegJo"], ["Caraml", "Halfway Home", "spuRFxcdKek"], ["Fraternal Twin", "Halo Fell Forever", "uPMv1KzKSF4"], ["Holy Motors", "Heaven's Night", "sM0oM6LLSME"], ["This Is Lorelei", "Hey Sarah Is It Gonna Rain Forever", "h7LPBVrbkFw"], ["koleżanka", "Hook, Line, Sinker!", "gL-2aRJGDwY"], ["Hydromag", "I Can Tell It's Love", "vcqDP_QLyWk"], ["Chastity Belt", "I Could Say Less", "27B1WvBf2Oo"], ["Penelope Isles", "I Loved You, Robert Pattinson", "0h2C4eCjFVE"], ["The Analog Circuits", "I Needed You", "U9oc4t02SII"], ["Winona Forever", "Inside Joke", "ANqPH3MHHfk"], ["dilute_calico98", "is it a mirror?", "4KFQp49t7lc"], ["atmos bloom", "Island", "zPRWUw9M9uU"], ["Saccades", "It Doesn't Matter", "3WiMHKeIbd0"], ["Graceborn", "Jujubee", "ULJmDbk7kWs"], ["This Is Lorelei", "The Kid With the Crown", "_Wm7jdmS41Q"], ["Sibille Attar", "KL + SA", "is_37rtAGs0"], ["Melissa Weikart", "L'amour se construit", "OgYlGWexhW0"], ["Bodywash", "Lapsang", "Gptu5XshMqY"], ["Mono Mochi", "Lessons In Love (I've Never Learned)", "wWSN57vNz1w"], ["Sex Week", "Life is a Circle", "8nD1B25DIY8"], ["lene 3000", "Lights Off", "I1zcOJL3n9A"], ["Thomas Flynn", "A Long Long Way to Go", "399n9c-PyLw"], ["Fine Food Market", "Losing at Life", "V_TOGzl7k-Y"], ["Crayon Angels, Mourn, Kenneth Ishak", "Lost Woods", "Fg4BFohIHbM"], ["Sam and Louise Sullivan", "Love & Devotion", "mK0hJ123R3Q"], ["The Homesick", "Love off the Leash", "f-n0uoAuQ-w"], ["Skinshape", "Lover", "WNQ7TNqvNW0"], ["Living Hour", "Magnet", "5x9NIyHufIw"], ["Starcleaner Reunion", "Maschine Mockup", "7dgZDWRd9_M"], ["The Palms", "Maybe", "8zqs8cPoBlI"], ["Mono Mochi", "Mind Games", "7NFHwfYXAmw"], ["Penelope Isles", "Moonwalker", "GgFOvFN8Uqc"], ["Pool Holograph", "Neon Hospital", "ry5MkkyQiBQ"], ["miicah", "New Guitar", "vKJf78O0RMU"], ["CLUB ORO", "no angel", "5C-Meiw_2XA"], ["Camp Blu", "no money", "pNptwkevQVQ"], ["Dazies", "No More Bones", "WxDv2Dq_hzo"], ["Esmé Patterson", "No River (Revisited)", "UsIERaAiXAM"], ["San Gabriel", "Now That It's Over", "76cOQUPj5fo"], ["Smidley", "Old Things Never Die", "Y-HiFdhRBVc"], ["Phoebe Bridgers", "On Video", "oflc52Eb5HI"], ["Old Man Canyon", "Opal", "dMZVYCCy0eA"], ["The Hails", "Pack It Up", "KK_ZJSEWADw"], ["Tipling Rock", "Palm", "eDFf509FoDQ"], ["Clear Coast", "Parting", "oOEVyz-P4pM"], ["Babehoven", "Pelorus", "mWEfVNVU5uY"], ["Smidley", "People Like You", "1_aQKT9StJY"], ["Virgo Rising", "Play the Game", "MyJbLQqXYm8"], ["Jakki and the Pink Smudge", "Precious", "7HOCiqJHFNE"], ["Penelope Isles", "Pretty In Pixels", "1fwYKQ766o8"], ["Grumpy", "Queens", "19yupwFnC70"], ["Juke the Tiger", "Radio and Semaphore", "w5iecC6UKd4"], ["Ex:Re", "Radio Station", "XTApTIg4qO4"], ["Slow Pulp", "Red Car", "Fa_Sm5l1_GM"], ["Gollylagging", "Red Fish", "mc2ES9IdE68"], ["Glasshouse Red Spider Mite", "Ride or Die", "QVDB77plW4U"], ["Boy Harsher", "Ronny", "uYdhsDKzlKE"], ["the booyah! kids", "rwm", "7YJxdSHIpyM"], ["Moon Panda", "Satellite", "VWYZFbV4aeU"], ["Wishy", "Sensational", "p5iYT2xbaNg"], ["Freak Slug", "Serpent", "9Nd-10G9pOQ"], ["PRESIDIO", "Shine of Love", "r8JRoBet4tI"], ["Ginger Root", "Soarin'", "R7hcy44LFB4"], ["Thomas Flynn", "So Lucky I Have You", "Hx63dxiL41Q"], ["Madrid Exit", "Somehow", "N-v1SrTIhn0"], ["Pool Girl", "Something to Say", "F8RHV_s-2O4"], ["Rhye", "Sometimes", "LYJngocpS2c"], ["Fine", "Sometimes I rush", "tcJQDnRSag0"], ["Butter Bath", "Speaking in Tongues", "Mj0YQ3Y9-6c"], ["Lamplight", "Speak To Us Of Love", "0TaeqS2mnno"], ["Sophie's Body", "Star", "n5K_ZIbTkPE"], ["GREEN EERIE", "Stay With You", "vHuQx0EFLBI"], ["Fine Food Market", "Stranger", "u3w4_o73hKc"], ["Sleepy Soul", "Strawberry Lemonade", "kBIKcz7lOJI"], ["Sexy Pigeon, Robin Cause", "Stuck Inside the Moment", "8MooxUHoTLU"], ["Juno Dunes", "Sugar Honey Iced Tea", "kmGc_f369rQ"], ["total tommy", "Tailgate", "8zLppEilNq0"], ["Starcleaner Reunion", "Theme", "TRWPinO-ff8"], ["Lande Hekt", "Threadbare", "J5s_l9NSQ8M"], ["The Slow Country", "Through Your Teeth", "tz7pyDVdp68"], ["Steve Stout", "today i'm feelin", "5ZGacrsUggk"], ["pitschouse", "Tomb", "aScTnTGnHec"], ["Harmony Index", "Trust", "a_NnVlLXUCQ"], ["V.V. Lightbody", "Two Swans", "mKFSyC8KuiE"], ["STACEY", "Upside Down Merry Go Round", "Hg6Ze3haA3A"], ["Sea Glass", "Wasting Our Time", "TNBtTMWU9iM"], ["the booyah! kids", "the way i feel inside", "xWtrZoKK88o"], ["The War On Drugs", "Who's That", "1fMvp6GCyZI"], ["Virgo Rising", "Wishbone", "49LzEz7OurU"], ["Freak Slug", "Wishing Bone", "vB0DoqKpkWw"], ["Chic Chameleon, Human Barbie", "Won't You Love Me Again? - Human Barbie Remix", "mIT-nDpLXtA"], ["Ian the Idiot", "You did everything for us today", "9S1Ozjz-D9o"], ["Goodvibes Sound", "You Never Know", "h5gR38X8QR0"], ["Rubber Band Gun", "Zombie in the Country", "JrNsx4KC9j8"]];
+const BIRP_BY_ID = Object.fromEntries(BIRP.map(([a,t,id])=>[id,a+" — "+t]));
+let ytAudio = null, ytAudioReady = false, ytWant = false, ytLoaded = false;
+function ensureYtAudio(){
+  if(ytAudio || !(window.YT && YT.Player)) return;
+  const f = ytFrame("ytAudio", "?controls=0", $("ytAudioWrap"));
+  ytAudio = new YT.Player(f, {events:{
+    onReady:()=>{ ytAudioReady = true; if(ytWant) startYt(); },
+    onStateChange:e=>{
+      if(!current.yt) return;
+      if(e.data===YT.PlayerState.PLAYING){ setPlayingUI(true); showYtTitle(); }
+    },
+    onError:()=>{ if(ytWant && ytAudio) setTimeout(()=>ytAudio.nextVideo(), 500); }
+  }});
+}
+function showYtTitle(){
+  try{ const id = ytAudio.getVideoData().video_id; $("np").textContent = "♪ " + (BIRP_BY_ID[id] || ytAudio.getVideoData().title); }catch(e){}
+}
+function startYt(){
+  ytWant = true;
+  if(!ytAudioReady){ ensureYtAudio(); $("np").textContent="Conectando con YouTube…"; return; }
+  ytAudio.unMute(); ytAudio.setVolume(Math.round(+$("vol").value*100));
+  if(ytLoaded){ ytAudio.playVideo(); return; }
+  const ids = BIRP.map(s=>s[2]);
+  for(let i=ids.length-1;i>0;i--){ const j=Math.random()*(i+1)|0; [ids[i],ids[j]]=[ids[j],ids[i]]; }
+  ytAudio.loadPlaylist(ids.slice(0,150), 0);
+  setTimeout(()=>{ try{ ytAudio.setLoop(true); }catch(e){} }, 1500);
+  ytLoaded = true;
+}
+function stopYt(){ ytWant=false; try{ ytAudio && ytAudio.pauseVideo(); }catch(e){} }
+
 function tune(s, autoplay){
+  const was = current;
   current = s; store.set("station", s.id);
-  audio.src = s.url + (s.url.includes("?")?"&":"?") + "t=" + Date.now();
+  if(was.yt && !s.yt) stopYt();
+  if(!s.yt){ audio.src = s.url + (s.url.includes("?")?"&":"?") + "t=" + Date.now(); }
+  else { audio.pause(); audio.removeAttribute("src"); }
   renderDial();
   $("np").textContent = autoplay ? "Conectando…" : "Presiona play";
   if(autoplay) start(); else setPlayingUI(false);
@@ -212,20 +262,21 @@ async function keepAwake(on){
     if(!on && wakeLock){ await wakeLock.release(); wakeLock=null; }
   }catch(e){}
 }
-document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible" && !audio.paused) keepAwake(true); });
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible" && audio.dataset.wanted==="1") keepAwake(true); });
 
 function mediaSession(){
   if(!("mediaSession" in navigator)) return;
   navigator.mediaSession.metadata = new MediaMetadata({title: current.name, artist: "Radio City Walk", artwork:[{src:"icon-512.png",sizes:"512x512",type:"image/png"}]});
-  navigator.mediaSession.setActionHandler("play", ()=>{audio.src=current.url;start();});
+  navigator.mediaSession.setActionHandler("play", ()=>{ if(!current.yt) audio.src=current.url; start(); });
   navigator.mediaSession.setActionHandler("pause", stop);
   navigator.mediaSession.setActionHandler("nexttrack", ()=>{ const i=STATIONS.indexOf(current); tune(STATIONS[(i+1)%STATIONS.length], true); });
 }
 
 function start(){
   audio.dataset.wanted = "1";
-  if(!audio.src) audio.src = current.url;
   keepAwake(true); mediaSession();
+  if(current.yt){ startYt(); return; }
+  if(!audio.src) audio.src = current.url;
   audio.play().then(()=>setPlayingUI(true)).catch(()=>{
     $("np").textContent = "No se pudo conectar. Prueba otra emisora.";
     setPlayingUI(false);
@@ -234,17 +285,19 @@ function start(){
 function stop(){
   audio.dataset.wanted = "0";
   audio.pause(); audio.removeAttribute("src"); audio.load(); // corta el stream, al volver retoma en vivo
+  stopYt();
   keepAwake(false);
   setPlayingUI(false);
 }
-$("playBtn").onclick = ()=> audio.paused ? (audio.src = current.url, start()) : stop();
+function isPlaying(){ return current.yt ? ytWant : !audio.paused; }
+$("playBtn").onclick = ()=> isPlaying() ? stop() : (current.yt || (audio.src = current.url), start());
 audio.addEventListener("playing", ()=>setPlayingUI(true));
 audio.addEventListener("error", ()=>{
-  if(audio.dataset.wanted==="1"){ $("np").textContent="Señal perdida, reintentando…"; setTimeout(()=>{audio.src=current.url;start()},4000); }
+  if(audio.dataset.wanted==="1" && !current.yt){ $("np").textContent="Señal perdida, reintentando…"; setTimeout(()=>{audio.src=current.url;start()},4000); }
 });
 $("vol").value = store.get("vol") ?? 0.8;
 audio.volume = +$("vol").value;
-$("vol").oninput = e=>{audio.volume=+e.target.value; store.set("vol", e.target.value)};
+$("vol").oninput = e=>{audio.volume=+e.target.value; store.set("vol", e.target.value); try{ ytAudio && ytAudio.setVolume(Math.round(audio.volume*100)); }catch(err){} };
 
 async function pollNowPlaying(){
   clearTimeout(npTimer);
@@ -255,6 +308,8 @@ async function pollNowPlaying(){
       const t = j.songs && j.songs[0];
       if(t) $("np").textContent = "♪ " + t.artist + " — " + t.title;
     }catch(e){}
+  } else if(current.yt){
+    if(ytWant) showYtTitle();
   } else if(!audio.paused){
     $("np").textContent = "♪ " + current.name + " en vivo";
   }
@@ -281,10 +336,17 @@ if(!sel.value) sel.value="*";
 sel.onchange = ()=>{ store.set("city", sel.value); randomWalk(); };
 
 function pool(){ return sel.value==="*" ? ALL : ALL.filter(v=>v.city===sel.value); }
-function randomWalk(){
-  const p = pool(); if(!p.length) return;
-  let v; do{ v = p[Math.random()*p.length|0]; } while(p.length>1 && curVid && v.id===curVid.id);
-  playVid(v);
+function randomWalk(fromButton){
+  let p = pool().filter(v=>!curVid || v.id!==curVid.id);
+  if(!p.length){
+    // La ciudad elegida no tiene más caminatas: pasar a "Todas las ciudades"
+    if(fromButton===true && sel.value!=="*"){
+      $("ytMsg").textContent = sel.value + " tiene una sola caminata. Te llevo a otra ciudad al azar.";
+      sel.value = "*"; store.set("city","*");
+    }
+    p = ALL.filter(v=>!curVid || v.id!==curVid.id);
+  }
+  playVid(p[Math.random()*p.length|0]);
 }
 function playVid(v){
   curVid = v;
@@ -294,11 +356,20 @@ function playVid(v){
   if(player && player.loadVideoById){ player.loadVideoById({videoId:v.id, startSeconds:v.t||0}); }
   else if(window.YT && YT.Player){ makePlayer(); }
 }
+/* Iframe de YouTube con su propia política de referrer (YouTube la exige; la página usa no-referrer para la radio) */
+function ytFrame(id, query, parent){
+  const f=document.createElement("iframe");
+  f.id = id;
+  f.allow = "autoplay; encrypted-media";
+  f.setAttribute("referrerpolicy","strict-origin-when-cross-origin");
+  f.src = "https://www.youtube.com/embed/" + query + (query.includes("?")?"&":"?") + "enablejsapi=1&playsinline=1&origin=" + encodeURIComponent(location.origin);
+  parent.appendChild(f);
+  return f;
+}
 function makePlayer(){
-  const wrap=$("ytwrap"); wrap.innerHTML='<div id="yt"></div>';
-  player = new YT.Player("yt", {
-    videoId: curVid.id,
-    playerVars:{autoplay:1, mute:1, controls:0, start:curVid.t||0, rel:0, playsinline:1, iv_load_policy:3, modestbranding:1, disablekb:1},
+  const wrap=$("ytwrap"); wrap.innerHTML='';
+  const f = ytFrame("yt", curVid.id+"?autoplay=1&mute=1&controls=0&start="+(curVid.t||0)+"&rel=0&iv_load_policy=3&modestbranding=1&disablekb=1", wrap);
+  player = new YT.Player(f, {
     events:{
       onReady:e=>{ e.target.mute(); e.target.playVideo(); },
       onStateChange:e=>{
@@ -319,10 +390,10 @@ function makePlayer(){
     }
   });
 }
-window.onYouTubeIframeAPIReady = ()=>{ if(curVid) makePlayer(); };
+window.onYouTubeIframeAPIReady = ()=>{ if(curVid) makePlayer(); ensureYtAudio(); };
 (function loadYT(){ const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; document.head.appendChild(s); })();
 
-$("nextWalk").onclick = randomWalk;
+$("nextWalk").onclick = ()=>randomWalk(true);
 $("ytGo").onclick = ()=>{
   const id = ytId($("ytInput").value);
   if(!id){ $("ytMsg").innerHTML='<span class="err">No reconozco ese link. Copia la URL completa del video.</span>'; return; }
@@ -368,8 +439,13 @@ $("fsBtn").onclick=()=>{
 };
 
 let idleT;
-function wake(){document.body.classList.remove("idle");clearTimeout(idleT);
-  idleT=setTimeout(()=>{ if(!$("walkPanel").open) document.body.classList.add("idle") },5000)}
+function goIdle(){
+  const a=document.activeElement;
+  if(a && (a.tagName==="INPUT" || a.tagName==="SELECT")){ wake(); return; } // no ocultar mientras escribe o elige
+  $("walkPanel").open=false;
+  document.body.classList.add("idle");
+}
+function wake(){document.body.classList.remove("idle");clearTimeout(idleT); idleT=setTimeout(goIdle,5000)}
 ["mousemove","keydown","touchstart"].forEach(e=>addEventListener(e,wake,{passive:true}));
 wake();
 
@@ -382,9 +458,18 @@ addEventListener("keydown",e=>{
 /* ---------- Inicio ---------- */
 if("serviceWorker" in navigator && location.protocol==="https:"){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 $("tapzone").addEventListener("click", e=>{ e.preventDefault(); wake(); });
+$("hideBtn").addEventListener("click", e=>{ e.stopPropagation(); clearTimeout(idleT); setTimeout(goIdle,50); });
+/* Ticker: estación y canción actuales */
+function syncTicker(){
+  $("tkStation").textContent = current.name;
+  $("tkSong").textContent = ($("np").textContent||"").replace(/^♪\s*/,"");
+  document.body.classList.toggle("on", $("radio").classList.contains("playing"));
+}
+new MutationObserver(syncTicker).observe($("np"),{childList:true,characterData:true,subtree:true});
+new MutationObserver(syncTicker).observe($("radio"),{attributes:true,attributeFilter:["class"]});
 renderDial();
 randomWalk();
-addEventListener("keydown",e=>{ if(e.target.tagName!=="INPUT" && e.key==="n") randomWalk(); });
+addEventListener("keydown",e=>{ if(e.target.tagName!=="INPUT" && e.key==="n") randomWalk(true); });
 pollNowPlaying();
 </script>
 </body>
