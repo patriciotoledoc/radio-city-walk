@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Radio City Walk</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#07080b">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500&family=Karla:wght@400;600&display=swap">
+<style>
+/* Layout: video a pantalla completa, panel tipo "radio de auto" abajo a la izquierda, reloj arriba a la derecha */
+:root{
+  --ink:#f3efe6;
+  --dim:#b9b3a6;
+  --glass:rgba(14,16,22,.62);
+  --line:rgba(243,239,230,.18);
+  --sodium:#ffb347;   /* luz de farol de calle */
+  --live:#ff4d4d;
+  --display:"Archivo Black", Impact, "Arial Black", sans-serif;
+  --body:"Karla", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:#07080b;color:var(--ink);font-family:var(--body);overflow:hidden}
+
+#stage{position:fixed;inset:0;overflow:hidden;background:#07080b}
+#bokeh{position:absolute;inset:0;width:100%;height:100%}
+/* iframe sobredimensionado para cubrir como "cover" */
+#yt{position:absolute;top:50%;left:50%;width:177.78vh;height:56.25vw;min-width:100vw;min-height:100vh;transform:translate(-50%,-50%);border:0;pointer-events:none}
+#shade{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(0,0,0,.35) 0%,transparent 22%,transparent 55%,rgba(0,0,0,.65) 100%)}
+
+.top{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+  padding:20px max(20px,env(safe-area-inset-right,0px)) 0 max(20px,env(safe-area-inset-left,0px));z-index:3}
+.brand{font-family:var(--display);font-size:clamp(18px,2.4vw,28px);letter-spacing:.02em;line-height:1;text-shadow:0 2px 18px rgba(0,0,0,.6)}
+.brand small{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--sodium);margin-top:6px;text-transform:uppercase}
+.clock{font-family:var(--mono);text-align:right;text-shadow:0 2px 12px rgba(0,0,0,.7)}
+.clock b{display:block;font-weight:500;font-size:clamp(22px,3vw,34px);font-variant-numeric:tabular-nums}
+.clock span{font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+
+.dock{position:fixed;left:max(20px,env(safe-area-inset-left,0px));bottom:max(20px,env(safe-area-inset-bottom,0px));z-index:3;
+  width:min(460px,calc(100vw - 40px));display:grid;gap:12px;transition:opacity .6s}
+body.idle .dock,body.idle .top,body.idle .tools{opacity:0}
+body.idle{cursor:none}
+
+.radio{background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:6px;padding:16px 18px;display:grid;gap:12px}
+.onair{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+.dot{width:8px;height:8px;border-radius:50%;background:#555}
+.playing .dot{background:var(--live);box-shadow:0 0 10px var(--live);animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.station{font-family:var(--display);font-size:24px;line-height:1.05}
+.np{font-family:var(--mono);font-size:13px;color:var(--sodium);min-height:1.3em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+button,select,input{font:inherit;color:var(--ink)}
+.play{width:52px;height:52px;border-radius:50%;border:2px solid var(--sodium);background:transparent;cursor:pointer;display:grid;place-items:center;flex:none}
+.play:hover{background:rgba(255,179,71,.14)}
+.play svg{width:20px;height:20px;fill:var(--sodium)}
+.vol{flex:1;min-width:120px;accent-color:var(--sodium)}
+select{background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:4px;padding:8px 10px;flex:1;min-width:0}
+select option{background:#15171d}
+
+.dial{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-family:var(--mono);font-size:11px;padding:5px 9px;border:1px solid var(--line);border-radius:3px;background:transparent;cursor:pointer;letter-spacing:.04em}
+.chip[aria-pressed="true"]{border-color:var(--sodium);color:var(--sodium)}
+
+details.walk{background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:6px;padding:12px 18px}
+details.walk summary{cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);list-style:none}
+details.walk summary::-webkit-details-marker{display:none}
+details.walk summary::before{content:"▸ ";color:var(--sodium)}
+details[open].walk summary::before{content:"▾ "}
+.walkbody{display:grid;gap:10px;margin-top:12px;font-size:13px;color:var(--dim)}
+.walkbody input{flex:1;min-width:0;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:4px;padding:8px 10px}
+.btn{background:var(--sodium);color:#1a1205;border:0;border-radius:4px;padding:8px 14px;font-weight:600;cursor:pointer}
+.walkbody a{color:var(--ink)}
+.err{color:var(--live)}
+
+.tools{position:fixed;right:max(20px,env(safe-area-inset-right,0px));bottom:max(20px,env(safe-area-inset-bottom,0px));z-index:3;display:flex;gap:8px;transition:opacity .6s}
+.tools button{background:var(--glass);border:1px solid var(--line);border-radius:4px;padding:8px 12px;cursor:pointer;font-family:var(--mono);font-size:12px}
+
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--sodium);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.playing .dot{animation:none}}
+@media (max-width:560px){.tools{top:90px;bottom:auto}}
+/* Celular y control remoto: objetivos táctiles grandes */
+@media (pointer:coarse){
+  .play{width:64px;height:64px}
+  .play svg{width:24px;height:24px}
+  .chip{font-size:13px;padding:9px 12px}
+  .btn,select,.walkbody input{padding:11px 14px;font-size:15px}
+  .tools button{padding:11px 14px;font-size:13px}
+  .vol{height:32px}
+}
+/* Celular en horizontal: panel más compacto para ver la ciudad */
+@media (orientation:landscape) and (max-height:500px){
+  .dock{width:min(420px,48vw);gap:8px}
+  .radio{padding:10px 14px;gap:8px}
+  .station{font-size:18px}
+  .dial{max-height:84px;overflow-y:auto}
+  details.walk{padding:8px 14px}
+  .top{padding-top:10px}
+  .tools{top:auto;bottom:max(20px,env(safe-area-inset-bottom,0px))}
+}
+.tapzone{position:fixed;inset:0;z-index:2;display:none}
+body.idle .tapzone{display:block}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="bokeh"></canvas>
+  <div id="ytwrap"></div>
+  <div id="shade"></div>
+</div>
+
+<header class="top">
+  <div class="brand">RADIO CITY WALK<small id="cityLabel">Indie rock · paseo en vivo</small></div>
+  <div class="clock"><b id="time">--:--</b><span id="date"></span></div>
+</header>
+
+<section class="dock">
+  <div class="radio" id="radio">
+    <div class="onair"><span class="dot"></span><span id="status">Detenido</span></div>
+    <div class="station" id="stationName">—</div>
+    <div class="np" id="np">Presiona play</div>
+    <div class="row">
+      <button class="play" id="playBtn" aria-label="Reproducir"><svg viewBox="0 0 24 24" id="playIcon"><path d="M7 4l14 8-14 8z"/></svg></button>
+      <input type="range" class="vol" id="vol" min="0" max="1" step="0.01" value="0.8" aria-label="Volumen">
+    </div>
+    <div class="dial" id="dial"></div>
+  </div>
+
+  <details class="walk" id="walkPanel">
+    <summary>Caminata</summary>
+    <div class="walkbody">
+      <div class="row">
+        <select id="citySel" aria-label="Ciudad"></select>
+        <button class="btn" id="nextWalk">Otra al azar</button>
+      </div>
+      <div id="ytMsg"></div>
+      <div class="row">
+        <input id="ytInput" placeholder="O pega un link de YouTube propio">
+        <button class="chip" id="ytGo">Usar</button>
+      </div>
+      <div><a id="ytLink" href="#" target="_blank" rel="noopener">Ver este video en YouTube</a></div>
+    </div>
+  </details>
+</section>
+
+<div class="tools">
+  <button id="fsBtn">Pantalla completa</button>
+</div>
+<div class="tapzone" id="tapzone" aria-hidden="true"></div>
+
+<audio id="audio" preload="none"></audio>
+
+<script>
+const STATIONS = [
+  {id:"indiepop", name:"Indie Pop Rocks", tag:"SomaFM", url:"https://ice1.somafm.com/indiepop-128-mp3", soma:"indiepop"},
+  {id:"bagel",    name:"BAGeL Radio",     tag:"SomaFM", url:"https://ice1.somafm.com/bagel-128-mp3",    soma:"bagel"},
+  {id:"kexp",     name:"KEXP Seattle",    tag:"KEXP",   url:"https://kexp.streamguys1.com/kexp160.aac"},
+  {id:"rp",       name:"Radio Paradise Rock", tag:"RP", url:"https://stream.radioparadise.com/rock-192"},
+  {id:"fiprock",  name:"FIP Rock",        tag:"Radio France", url:"https://icecast.radiofrance.fr/fiprock-midfi.mp3"}
+];
+
+const $ = id => document.getElementById(id);
+const audio = $("audio");
+const store = {
+  get(k){try{return localStorage.getItem(k)}catch(e){return null}},
+  set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}
+};
+
+/* ---------- Radio ---------- */
+let current = STATIONS.find(s=>s.id===store.get("station")) || STATIONS[0];
+let npTimer = null;
+
+function renderDial(){
+  $("dial").innerHTML = "";
+  STATIONS.forEach(s=>{
+    const b = document.createElement("button");
+    b.className = "chip"; b.textContent = s.name;
+    b.setAttribute("aria-pressed", s.id===current.id);
+    b.onclick = ()=>tune(s, !audio.paused || audio.dataset.wanted==="1");
+    $("dial").appendChild(b);
+  });
+  $("stationName").textContent = current.name;
+}
+
+function setPlayingUI(on){
+  $("radio").classList.toggle("playing", on);
+  $("status").textContent = on ? "En vivo · " + current.tag : "Detenido";
+  $("playIcon").innerHTML = on ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>' : '<path d="M7 4l14 8-14 8z"/>';
+  $("playBtn").setAttribute("aria-label", on ? "Pausar" : "Reproducir");
+}
+
+function tune(s, autoplay){
+  current = s; store.set("station", s.id);
+  audio.src = s.url + (s.url.includes("?")?"&":"?") + "t=" + Date.now();
+  renderDial();
+  $("np").textContent = autoplay ? "Conectando…" : "Presiona play";
+  if(autoplay) start(); else setPlayingUI(false);
+  pollNowPlaying();
+}
+
+/* Mantener la pantalla encendida mientras suena (clave al duplicar pantalla al TV) */
+let wakeLock = null;
+async function keepAwake(on){
+  try{
+    if(on && "wakeLock" in navigator && !wakeLock){ wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release",()=>wakeLock=null); }
+    if(!on && wakeLock){ await wakeLock.release(); wakeLock=null; }
+  }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible" && !audio.paused) keepAwake(true); });
+
+function mediaSession(){
+  if(!("mediaSession" in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({title: current.name, artist: "Radio City Walk", artwork:[{src:"icon-512.png",sizes:"512x512",type:"image/png"}]});
+  navigator.mediaSession.setActionHandler("play", ()=>{audio.src=current.url;start();});
+  navigator.mediaSession.setActionHandler("pause", stop);
+  navigator.mediaSession.setActionHandler("nexttrack", ()=>{ const i=STATIONS.indexOf(current); tune(STATIONS[(i+1)%STATIONS.length], true); });
+}
+
+function start(){
+  audio.dataset.wanted = "1";
+  if(!audio.src) audio.src = current.url;
+  keepAwake(true); mediaSession();
+  audio.play().then(()=>setPlayingUI(true)).catch(()=>{
+    $("np").textContent = "No se pudo conectar. Prueba otra emisora.";
+    setPlayingUI(false);
+  });
+}
+function stop(){
+  audio.dataset.wanted = "0";
+  audio.pause(); audio.removeAttribute("src"); audio.load(); // corta el stream, al volver retoma en vivo
+  keepAwake(false);
+  setPlayingUI(false);
+}
+$("playBtn").onclick = ()=> audio.paused ? (audio.src = current.url, start()) : stop();
+audio.addEventListener("playing", ()=>setPlayingUI(true));
+audio.addEventListener("error", ()=>{
+  if(audio.dataset.wanted==="1"){ $("np").textContent="Señal perdida, reintentando…"; setTimeout(()=>{audio.src=current.url;start()},4000); }
+});
+$("vol").value = store.get("vol") ?? 0.8;
+audio.volume = +$("vol").value;
+$("vol").oninput = e=>{audio.volume=+e.target.value; store.set("vol", e.target.value)};
+
+async function pollNowPlaying(){
+  clearTimeout(npTimer);
+  if(current.soma){
+    try{
+      const r = await fetch("https://somafm.com/songs/"+current.soma+".json",{cache:"no-store"});
+      const j = await r.json();
+      const t = j.songs && j.songs[0];
+      if(t) $("np").textContent = "♪ " + t.artist + " — " + t.title;
+    }catch(e){}
+  } else if(!audio.paused){
+    $("np").textContent = "♪ " + current.name + " en vivo";
+  }
+  npTimer = setTimeout(pollNowPlaying, 30000);
+}
+
+/* ---------- Video de fondo ---------- */
+function ytId(text){
+  text = (text||"").trim();
+  if(/^[\w-]{11}$/.test(text)) return text;
+  const m = text.match(/(?:v=|youtu\.be\/|\/live\/|\/embed\/|\/shorts\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+/* Caminatas de Drive & Listen: [ciudad, país, [[videoId, segundoInicio], ...]] */
+const WALKS = [["Abu Dhabi","UAE",[["GOrNUV05y30",0],["P85jitml9sk",0],["kSvsovUxAbo",34],["i8EVppWJW9M",0]]],["Acapulco","Mexico",[["Tcf-wLeT-lk",30]]],["Ahmedabad","India",[["yq6QbwnDFVE",39]]],["Amsterdam","Netherlands",[["E07rTPgIvn0",10],["WrsyxC6QzJE",30],["N0af7_w5GBQ",15]]],["Angeles City","Philippines",[["eCRpQ6s3MMo",0],["uZ3GAq-OQJE",0],["ccUIVYk0jiE",0],["GxtPZnPJIb8",9]]],["Ankara","Turkey",[["-vpyJZ1gMNo",0],["zRs1IhDjDhs",0],["D4GaUhaWGPc",0],["CoCIM-Qet7M",0]]],["Antalya","Turkey",[["5AsSKZSzFlQ",6],["fkpngNsm11w",6],["8xa5jiKWzBI",7],["FV9gIvi2REU",7]]],["Athens","Greece",[["W1EJY_CFtWs",0],["Pz6ej7DuuMc",20],["eRxF4RzyGhU",0],["QVh0TuWyEYc",0],["lLIeYdq0Rlw",0],["wqvnZj-Hbqw",0],["Mygj2YZ1Iq4",0],["MntpGNl-U30",0],["JvYLW_DqVts",0],["paI82YoowS0",0],["baBcyXh1h-w",0],["_tUpxIsEhw0",0],["9tpxI3Rci9I",0],["MSlzENRPbZ8",0],["ICRkgwkZD9M",0],["C18Y4jUT3LA",0],["6Q4m8t2QNfc",0],["oQWb3-dhtL4",10],["6BT7Qm6Af2Q",10],["AHuXzPMZLR0",2]]],["Atlanta","USA",[["4hkRVa5Ls4s",31]]],["Auckland","New Zealand",[["y7zhnCmGvi8",45]]],["Bacolod","Philippines",[["BFNQS8nwWms",0],["8RG-rg3sZRM",0]]],["Baguio","Philippines",[["CoBv_bul0H0",0],["XOIK3FoNBak",0],["T9qKxbUFSGI",0],["7OyQRo1Wrrg",0],["nK4dttATot8",0],["zBwdH1LstC8",0],["1W1IME87K6I",0],["zZI6r9tjvSg",0],["Ao0opnX4pBI",0]]],["Bangalore","India",[["st7rGnwyVwQ",1],["U7xLNEi5ios",2],["T8hPRjeHxCA",10],["hPsZ6jkKIVY",2],["9zY8EIXSluY",10],["eHczMBP0FOw",2],["GBoyxo6pLzw",0],["45257KCEcf0",600],["SltHv8ko5rs",0],["Dny_f4byP2M",0],["I-KxJ6wwanM",0],["0mi3DIhylNg",0]]],["Barcelona","Spain",[["1i0V8PfrSC8",0],["A6d0eFfhfgo",0],["2AOLryQrNMw",16800],["0TmhAd3rLlM",9],["e6CHrwAQDiM",10],["thncN0KR_dE",0],["9bb5HodXkI8",22],["ABGiFGoQr4o",0],["epDp5YVYpNc",0],["Dctktf_QLpE",0],["cY42_t7IHvI",28],["_UfPnTskuAk",0],["__civ2E9A4g",0],["YyVGh7Yqx30",0],["xhlyU9m-syo",0],["-ZXjFeBd9Us",25],["F9_oIh8QaJw",5],["fCHqH7fQ6kE",0],["k3RF3Yjz8WM",0],["j2pNWpJIX8Q",0],["lQMvWjZ_mMQ",0],["LgfUWpq-zf4",0],["BLkfhjvE1Uo",0],["7zc386W0fcY",10],["iLnplJGOypw",30],["bJlUA-lnvYg",15],["h_nTvenH1Gs",10],["bibgZ8MHyY8",30]]],["Basel","Switzerland",[["dUqTkKoJwwA",2],["KCd9f-AXtxs",0],["0-PdcaAPswk",0],["Pwf363E0Grw",0],["mHnfHZP1mXo",0],["Tp9k97KWQeA",30],["1NaTRmFh5-s",0],["SGNXp973rhI",0],["XreJ-Y6Qoc8",0],["kXf58iBFNQ4",0],["ixFvOS3q800",0],["RWSY0yQD5p0",0],["J8gOmP3y9TM",0]]],["Beijing","China",[["qztRJrWt-Es",10],["a9Qdlomi04M",0],["LB0V66tXQd0",0],["gOZYAE-2cs8",0],["Y4OIs5e84wc",0],["-dUkLw7DHNE",0],["oN2un08_GWs",0],["GMZwuiOLj0Q",0],["UjFXspkyM50",0],["iq4SbooVM7s",0],["eOH-_UDFsjA",0],["SOg7Bu-PtYg",0],["vt80L_S_xIs",0],["GEGyDm-ls3Q",0],["Gx74XbSIVEc",0],["LWpGYWoqsp4",0],["EEyMwxqBpxA",0],["Y2ZUtNteNAw",0],["FZehxcWA6b0",0],["BakErt9T3zY",0]]],["Belfast","Northern Ireland",[["_ssi2_O3-bs",0],["TMorV8Aolb4",0],["bxmJzRhDSEo",0],["8lQ6DqMY3hE",0],["4kPyOAXjEFg",0],["-8PQnXsGaDQ",0],["-8lQPMw7IMo",0],["VgNiD5ssk7A",0],["nImI5L9NRlQ",0],["I-ZiJr3HNpU",0],["KOZWqDpBlGA",0],["RQJVlteQpc8",0],["nmItL_g1OmQ",0]]],["Belo Horizonte","Brazil",[["hGltVhA7CRY",0],["7sVZhYNxDlg",0],["A9XqXrVd8ks",0],["C3Gr2gPMG9Q",0],["XBegpgkf8fU",0],["UjXwYOs6Za4",0]]],["Berlin","Germany",[["1ToDl0_20lw",10],["1qitNAzhxQk",0],["6ZQ4NVlrgVI",0],["x0cM4RLncDU",0],["Fjz-GlSO64c",0],["sD3IJr69eoY",0],["bdVMWSvlibE",0],["YIpKgZs6AfQ",0],["vI1ny1aMUTw",0],["IzZkjS4nBQI",0],["QmRu-SAFRrE",0],["_WQqyySU7mY",0],["Autce72V3H4",0],["faNd76CW824",0],["Liw6BeNj3yo",0],["iZJ7aYR464g",0],["nzYqpTj4d9c",0],["B2PFq3jhDr0",0],["zRoyISYHL4w",0],["Jpm70prjaHc",0],["6xNyKBEm1lo",10]]],["Bhopal","India",[["Fs_Sx6BySig",30],["5MgZboVRiq8",30]]],["Bhubaneswar","India",[["L6utdhSi79M",10]]],["Bordeaux","France",[["v0iMoo0f0d0",10],["0dFEuId8TO0",660],["XHs9RqVKnJM",20]]],["Boston","USA",[["MxWGw_kYjDg",7]]],["Brisbane","Australia",[["G1zBrv87rBw",5],["FTY5cCH4z80",2],["bZBcZfk7CAY",10],["ZK1aJiRrhhY",11]]],["Bristol","England",[["VR1CtpbiY88",0]]],["Budapest","Hungary",[["FyjGmsTMM7U",10],["D1bvja67gP4",30]]],["Buenos Aires","Argentina",[["Zwqj0f8QsiU",10],["GFI0IonDsDY",15],["L9KKrhb9Lr8",10]]],["Cairo","Egypt",[["MY3kolw6mNI",1],["EaQr917lRgI",60],["hTN8T-OAtAU",23]]],["Campinas","Brazil",[["_35Og6VvGVE",0],["e9V3lU83Ky8",0],["xN7w4zfSI08",0],["fEStyt6diM0",0],["O-WSsAEFx4c",0]]],["Cancun","Mexico",[["_SVv-YROSXI",60],["QUQ-6qJi7-w",0]]],["Cape Town","South Africa",[["6L5Jo-h1kS4",0],["gzWgos4SBRQ",0],["0OOgwQ2sFGo",0],["leAL9c4meTs",0],["6rhv5iKyc9g",0],["tjKSvusvcyM",0],["7EJiLgJTpgg",0],["DI1qQgD8K2Y",0],["ALnXJrg2rvU",0],["cZ-_ewLGMqo",0],["se03jGTUeoQ",5],["LuxKi4bQiQA",5]]],["Cebu City","Philippines",[["kSTMDkKHbcI",0],["vMpB0RpxOqE",0],["f8vPdLob-mw",0],["-h0qn2fwyiA",0],["O_Bq7rOJjMk",0],["xYkn2kyMY3A",0],["jcHcYXIz0tE",0],["JaPo6VlKvek",0],["rsC4JHcBKWc",0],["IoBKcXHbbl8",0],["hTRCf6EvMps",0],["8YKsaNaqrsc",0],["QutM5c6RhUo",0],["bzgNtK3THV4",0],["uCbWr--IeOU",0],["NMJ2ZBFR-P4",0],["4biyRXdMJxU",0],["HUnDQmnSmAw",1200],["mq-c1DXlqN0",32],["w2APhST2bFE",0]]],["Chandigarh","India",[["ltK2FfJkosw",60],["4vFOHLMz6gw",60],["iWpRM52ZaZk",1]]],["Chennai","India",[["qceugjhlBGM",6],["zQBxSB4HDAc",1],["-tz34kbUzSw",2]]],["Curitiba","Brazil",[["_k3n3PFgXHc",0]]],["Dakar","Senegal",[["Nd0EbZ-pG7E",0],["_gWqyfJ0knU",0],["I5UUh4krtqk",0],["MKRPr6-nQjA",0]]],["Delhi","India",[["-Xlzej8RTTU",1],["g6TvxuTbDvA",20],["J94a3k2Wm8U",1],["dGY4ON940uA",1],["9puDiItvJKE",1],["QsyoLAWWQ9Q",1],["10fn_BxFMk0",1],["N97_dJeQ5O8",2],["LTFc5qnqJgc",20]]],["Dubai","UAE",[["x4mZ-4BuMFc",0],["6Hke2MDEtcw",0],["Z-8RJ7hFyMA",0],["nlUEj2XWlXs",0],["4sGEKncZOIw",0],["Cv1eUQ0ukcQ",0],["I96GvaWB8XE",0],["oS4mhMBvmoM",0],["5D_lM0LNGlE",0],["iGhSm9GYRkI",0],["1Hezfe8yAqM",0],["bBEv5X_KRF0",0],["fP_hbLR4NkM",0],["qJuxOX4MZ0I",0],["J-x0lcn4jH4",0],["O0UBbWizmiA",0],["SmZPSyNW0VU",0],["Kt7JljZ-yic",0],["LVdrOjimKZ0",0],["WwneYv0LWw0",0],["GWJ94q9AGiA",0],["4XIPemCcpEQ",0],["tudnmvTMh6c",0],["bIigaY3m4KU",0],["mUBIlVWebMM",0],["BCXfBKdAF38",0],["-SD4zBFlEy8",0],["E2jECh0Bkjw",0],["KaOQw-rlJEU",0],["VDgwgCk_UAs",0],["lV14OAAXGfc",0],["uVWp1niRvAg",0],["sYN3MktdbWU",0],["QcfdVPE08AE",0],["eSjuaXfZZN0",0],["JXe-1dIlCw4",22]]],["Dublin","Ireland",[["B5Z3FV8ZVds",10],["8IGULBIww6E",2]]],["Dunedin","New Zealand",[["VK8LuY1J1rs",0]]],["Edinburgh","UK",[["G5S9sjs6NiU",10],["dyWWnDomZH0",12]]],["Faisalabad","Pakistan",[["PW41SQTvkYE",0],["0kHpxvVxCNc",0]]],["Fortaleza","Brazil",[["nCPmorL-7hU",0]]],["Frankfurt","Germany",[["x1NbY6hoGf4",0]]],["General Santos City","Philippines",[["kSVQCIclmNQ",0],["aWAE9kOFK-0",0],["p3QlLXlFBNc",0]]],["Geneva","Switzerland",[["B_u2NjtiBOU",0],["rPV5ERlzNCk",0],["NsJPHB4qkVQ",0],["VafpgcOmzGM",0],["ihoOUO5Q1DE",0],["aQQRAM4p44Q",0],["2SCzr_Vlt44",11],["AF9HAxsAc8U",0],["QycETXk5ezQ",0],["7lHN_iAJiuo",0],["vDK5Hne6_H0",0],["nXEE6zlskq8",0],["bFwWPXUEnvA",0],["4d3M3tiBo3w",0],["SI6NoxfyMEg",0],["DTnUhBJ-N9s",0],["muUk9wIV6is",0],["UuQPuU-mnUA",0],["iq8UIr1TU08",0],["Qjr05TM83Jo",0],["IiXbCOUs3ek",10],["V5l3rFKBoVI",13],["RCbPcBa64L0",0],["T5ht-7ZjJVk",10]]],["Goa","India",[["wA7SEHYU2jE",10],["ZyxCKRWcqUM",1],["8p_z7mCX5_c",1],["gflBqzcPAKs",10],["ZnpFrYOjQKQ",5]]],["Gold Coast","Australia",[["_pm6aYFzLl8",0]]],["Guadalajara","Mexico",[["tbPTNqC9y-w",8],["JgPOs00bYAc",1]]],["Guwahati","India",[["2wsHvrUmBFo",1]]],["Hamburg","Germany",[["dLmeq6hU-5E",10],["v6XLJdnAP3M",2]]],["Havana","Cuba",[["wtEYQmXSwRk",15],["3FK0uJfin6Y",0],["IEnv4ZorXmY",0],["dj8p1WftRoU",0],["63ARQhtaUPs",0],["QFjWaQGl6NA",0],["anLhDC6kCFY",0],["g-MNUI-NTMQ",0],["PE6XZLKzsZU",2],["HWEzGG6lLc8",2]]],["Hollywood","USA",[["q_0fKnQZ-lA",35]]],["Hyderabad","India",[["4nMHlJjMQYM",0],["Ltsu-cfJHvo",2],["Gq1EtXTL7ZE",0],["qMacjs2tFvc",2]]],["Ibiza","Spain",[["jsJWqQ5PfTs",8],["my6pSMxNiT0",0]]],["Islamabad","Pakistan",[["Y5c6PRBYF3w",0],["gLOXHWSz5oQ",0]]],["Istanbul","Turkey",[["C796Mh7kMM8",10],["v7U-cO3RJz8",10],["fQFrt5QqGNE",10]]],["Izmir","Turkey",[["H1h4F2WPQbE",0],["lQNWIvwwSd0",5],["9AiXOi-q4_8",25]]],["Jaipur","India",[["w3zLtmQz-T4",1],["RG2yl9hE1VI",3]]],["Jakarta","Indonesia",[["nuj-vjSrD6Y",33],["G0-Ikz33hEs",2],["EwxkiHE6YsU",45]]],["Johannesburg","South Africa",[["KXIiAUFgJvI",0]]],["Karachi","Pakistan",[["r4lxLFKHt8g",10]]],["Kochi","India",[["-65OxoMJcGQ",0]]],["Kolkata","India",[["VxetycIW22A",20],["KU_9xVGUevY",2]]],["Kuala Lumpur","Malaysia",[["s91tCVtAYDM",10],["wzTJZKQKK9U",10]]],["La Romana","Dominican Republic",[["c6H2bquoXo8",30]]],["Lahore","Pakistan",[["O1AQcFpPs04",10]]],["Las Vegas","USA",[["uppuxvbW-w8",10]]],["Lauterbrunnen","Switzerland",[["WvaYxmnQqoE",12],["M1tnNo3r1aU",0],["8mSG40o-iJ0",0],["agk1ziBTxIU",10],["VDWBP89MAxQ",30]]],["Lisbon","Portugal",[["vNvjqoGbcgs",0],["9mw6z6enByA",0],["NGR1mkPFqSA",0],["E2sRP5KpwKQ",0],["aSPjORdz5jM",0],["5ieD4hXK7ng",0],["6tZYZSV8FL8",0],["9TSN6o-Znlw",0],["LeILjGUapKA",0],["MBarzMuQIaI",0],["Avn0nkuc6Ao",0],["0RBwAtgp2zQ",0],["kPRoHUvMBEA",0],["dyZWFROkCiA",0],["TWpzmLpNvkM",0],["7YrRr7m6fbI",0],["I98k-Fwqn8A",0],["48vgQg2gN4U",0],["dklCgAfRcdY",0],["S4MLysxqO_Y",0],["GoK2sn82rq4",0],["Dcq2N_NJme8",0],["218QXTzHbW4",0],["KU26CCoPIqw",0],["XtGvlzfhGPQ",5],["T44KKC_fqyM",10]]],["Liverpool","England",[["jKJ2zDSYns8",10],["f0BJ2JNKIr8",2]]],["Ljubljana","Slovenia",[["RYZlWsr_pv0",0],["Kz1Mo4VTjF8",0]]],["London","UK",[["aBOsIVU9mms",20],["sApvDcSNUkw",0],["xZ3e7CBQFrU",10],["teA4uiYqP6A",25],["vsI_pKNcgeQ",15]]],["Lyon","France",[["a4kRpQEfj9E",20],["5oDtbniATlc",2]]],["Madrid","Spain",[["gT4c7ye3SoA",15],["oER__tVuOPU",10]]],["Manila","Philippines",[["aTbndWIwHTc",2],["D2bQVNPWt_E",60],["L3MunFUejkA",25],["BcUnoIF_ThU",20],["lIrqa8gnNiU",23]]],["Melbourne","Australia",[["6Geptgx-50o",10],["BKEN7f5qRBU",30]]],["Mexico City","Mexico",[["Z1SbLIKCrAo",15],["fB3762NoXdg",15]]],["Miami","USA",[["7qz13Chz_84",1],["mguAnX5ocEs",1],["TFTJN4XIsQQ",10]]],["Milan","Italy",[["8FCkb7NZ7SI",48],["k42PZAtiUfg",1],["tRqbPTAky0U",1],["jj8pwS0o-Nk",1],["T-QDHkW4hQw",62],["nW1RRVBlMGY",1],["uEDmuRb-MNY",1],["-h2jnlpp8IQ",1],["h6m5nK2p3C8",120],["88lcNYiXtlc",1],["sdQwncTmnL4",1],["3F0d_LkAAW4",20],["VsJrbd4YZis",25],["xrRFKEdtQIc",15]]],["Monaco","Monaco",[["CAsklz0e0_Q",28],["HIKn0zYLiPo",2435],["ReCddZa2w7E",5]]],["Monterrey","Mexico",[["LhaYsVn69o8",1],["vixiic98bL0",1],["Us3KR1-CMOg",1],["ExKU8W7-n00",1],["wgEGuBA57Oo",10]]],["Montevideo","Uruguay",[["z0y2iViVJ0Y",10],["NyYYptiEGAY",5]]],["Moscow","Russia",[["atud53sOPSg",0],["FBzlvce4_EU",5],["vDAmd0hTnbs",10],["k7V3aerwT0k",60],["dq12newoPY4",0],["dvA6EQQvM0o",0],["AkYDNjrIw50",0],["CxXjIv7rDig",2]]],["Mumbai","India",[["5GwI8sUcEp8",0],["xUna_XUXCQE",0],["3jLj6dHMEg8",0],["5M8qbDHhaAg",0]]],["Munich","Germany",[["8ynE2JA8kQE",30],["4lOzYUlhJEw",10]]],["New Orleans","USA",[["fctunKraRJU",5]]],["New York City","USA",[["ga5l8zTB-Gw",1],["HW4GoeRZC2Q",1],["iU5QjAbuhec",1],["sVAw-4Txu5k",1],["2M5uVevS6ZU",1],["weQPZM77Ojs",1],["3g5oUmPygTI",1],["yWlX7el9N-s",1],["k4NlUHSrNeY",1],["CSC83talUy4",1],["gH-ONX7fzUA",1],["ErxJ2Qae60c",1],["kYybyFVaDiw",1],["5OUvZR35uPM",1],["CsIIdZltO-w",1],["iN63LKlASGc",1],["72Irs8Ff6dk",1],["UawgHRhK7WI",1],["zA9CzVfI7Q0",1],["RS2_mi4OAH8",2],["SWq0D-Q8UQI",15],["6vnxzfejWN4",5],["OgQtDFRWai8",10],["F8MN0o6RS9o",60],["BOa0zQBRs_M",22]]],["Nice","France",[["-F-agNdrY2Q",51],["UNpzuU3H1d0",8525],["aku4vV1ZMH0",0]]],["Nizhny Novgorod","Russia",[["ylk6rQOKm7M",0],["jrQXQqzTEqA",0],["mKOcPRXpUtk",0],["jKv_hH4r50g",0]]],["Novosibirsk","Russia",[["aK9CWdaMN3Q",1],["O7wkw4LPf1Y",1],["3SXAOjbaMsc",1],["ZaXwTcqzp9o",1],["cEc8Bb62POA",11],["aaUAsn8vth4",1],["QDTmq6lRPzY",1],["ym-V50VtWcU",1],["DMIOCkF5QR0",1],["z4uzycnyfbo",1],["s9noJD9MOD4",1],["J33rNVM7p6Q",1],["RkY2SboBQJQ",1],["HXPj-TXx7Dk",1],["IdUFMw2PevY",1],["XKZ_y-pzfys",1],["eCGO4jGlcgo",1],["AhZ9x3wIDQ4",1],["DmfXXF45rTg",10],["AcjU3DxiylA",42],["97PZAg9YarI",20]]],["Orlando","USA",[["W_TbkruGZRc",2]]],["Oslo","Norway",[["SYdq43y6fao",1],["nr3HUVWw0WI",1],["4JAsHiQBefo",1],["hlqI3qD_yoQ",30],["EZC10sHR7Gc",1],["x1ayhJGR-Xk",1],["6Z2vAc8YAiM",1],["g1ZFQZF2VPM",30],["UESsFgnk7e8",1],["rcXR1vpO6wk",1],["gV1xGPGThBg",1],["7yg6vMJ0nno",1],["5156vH9oq28",1],["dIwLMmb74Jo",1],["uXT19PwabpE",5],["2zMXZoFg4bc",10],["7ffYUu5frOg",18]]],["Paris","France",[["9hDEJK-zzUk",10],["buOobuqZ5RU",10],["vPMT198-vAY",15],["aZ-31-p3saU",20],["cxDvgdKErqY",10],["EVgeVtSyKyg",15],["A_eMk66Ljt0",15],["z1rub7NjjPI",120]]],["Prague","Czechia",[["-2RMgqP6pdo",10],["9oQdBBBJ4lc",5]]],["Presidente Prudente","Brazil",[["QBQF_oVDXSY",0]]],["Puebla","Mexico",[["V5_ow06Wr5Q",0]]],["Pune","India",[["6h3QIRSebjw",1]]],["Rio De Janeiro","Brazil",[["FaZMPZdSN2g",0],["eCXlcUCgJrs",30]]],["Rome","Italy",[["ot-HMv_PKs0",145],["KtmOAn2uq7U",4200],["EsFheWkimsU",19],["d7rkf34uiVM",1],["_M3nwOxzABI",1],["vK928kqYUPI",30],["XgNaclUNCgU",1],["uOJkVLwnCNI",104],["Shf_P0PLhNA",1],["bpqiyAez7zk",1],["1a6ok9yMjMM",1],["ZIiOwKETKA8",47],["6z7k8ddtt3c",1],["zkZWKvndt4A",20],["iawLpUFXC4c",10],["vM1OQhQDwMw",10],["eJeF7hDB0UA",2],["tsnk3ruKUsY",5]]],["Samarkand","Uzbekistan",[["pl2wmLus_H8",0]]],["San Fernando, Pampanga","Philippines",[["cgZCxi5w4fQ",0],["rvBpJUdu3Os",0],["Jomzs7q_nhs",0],["ZqvALkI2SZ8",0],["VutjWp1fddQ",0]]],["San Francisco","USA",[["E26l-3ag5AI",10]]],["Santiago de los Caballeros","Dominican Republic",[["J4c6K06RAhI",0]]],["Santo Domingo","Dominican Republic",[["cjt2HY8AGSU",0]]],["Sao Paulo","Brazil",[["b0DnrC-Lt90",8]]],["Seattle","USA",[["3EaCj-seAHM",30]]],["Seoul","Korea",[["sVwL8Lxk49I",0],["XWPUsUw-iec",10],["V_vj7BMawAI",1],["jxQX5XI766c",10],["XumWx48Hnt0",120],["EAbmlAIcuqY",40],["NxcL7gydx1U",0],["YsFQaZpqCXI",10]]],["Singapore","Singapore",[["aUJl46bEWYo",10],["eYqPXjUAgRA",2],["tGcz4dUvUkg",2],["mJfRFO0_IXc",2]]],["Sofia","Bulgaria",[["A_ONUECVQhE",0],["x7QL01I80Hc",0]]],["St. Petersburg","Russia",[["4FL-rbkUWhM",10],["QxX_EzN9Ckg",10]]],["Stockholm","Sweden",[["GWLoolEDae8",19],["lQGPw6hPew8",10],["Jr9x-RB4E1U",20],["Hl8rdgAcdsk",14]]],["Stuttgart","Germany",[["y0D_YLfOxPQ",0]]],["Sydney","Australia",[["zu-HyvoScls",0],["iif1sA9jhXY",10],["hWsHDm_VKyg",30],["I4d4YaCA2ac",30]]],["Taipei","Taiwan",[["43OGN5GDqdI",60],["zWfQ7SGfAhI",30],["80g0enQNU2c",5]]],["Tashkent","Uzbekistan",[["Htg3DMavGQ4",0],["OBKSscSA_aM",0]]],["Tehran","Iran",[["lZ8Q7NxY8mA",0],["JQYImDl4zqE",0],["b0HlV3edOsY",120],["Ln194SF0DUE",45],["DLZv4AfsvTk",10],["pEZtZyT6aPA",0],["1e-gqTJjZnY",0],["vj4K80vEQxk",0],["GOk_GsDz-xI",0],["9yIMBrpHMhk",0],["dh9naeCPgiE",0],["xRE7ZQqjGm0",0],["Uni0Jj3JFoI",0],["RvBlApeWXRs",0],["qDxWoElVJvU",0],["yBggtz8G1Sg",0],["cLMP8MT3XnE",0],["pxuowVgte3w",0],["7PgagDGPzhM",0]]],["Tel Aviv","Israel",[["co6L9jw_Wno",40],["57PLw3i7nm0",35]]],["Thessaloniki","Greece",[["0I3WEt1mxjY",0],["z2m_0AKUJFM",0],["Wfz5bx9UPwg",0],["bBWhW5ElrpM",0],["J4RIKZNduOM",0],["1c736pGB2Fo",0],["x4wWN1H5_Dk",0],["04aSTkmmmzg",0],["u-oOgp-avt8",0],["a1iAPU8lExc",0],["TAy7iZYfqTc",0],["o8dPf_jTpzk",0],["eO45Wfu4pFo",0],["oS-_Xd1U7pk",0],["17JtaUhBfD4",0],["4VmYSoToSMA",0],["u1jx3NfehLo",0],["yqHh3xNd0iE",23],["dkofh168_0A",20],["tsC78u3rcL8",14]]],["Tokyo","Japan",[["JeEfI7pCkXU",5],["dGy_6qyyY7c",20],["v0lFFJlIgTU",1],["Et7O5-CzJZg",20],["R4B36TMMGp4",35],["_dWyKj7I9JM",10]]],["Toronto","Canada",[["72OLa2NRbvU",50]]],["Trabzon","Turkey",[["B2eklsQCUIo",0],["deSKucPuPQY",0],["fHEhHPfuyI8",0],["xp9u_3R8npk",0],["axRNZUvWwGQ",0]]],["Vancouver","Canada",[["w34h7txm-z8",180]]],["Vienna","Austria",[["hH7hOWp-Jno",30],["IlwYoIFcHRA",20]]],["Warsaw","Poland",[["OtV6cxO27CE",9],["YIQ4Ap9aUMo",8]]],["Washington DC","USA",[["MIDrDB7XLD0",13]]],["Wuhan","China",[["wYu4LfqXkX4",10]]],["Yekaterinburg","Russia",[["aPfc5PY-foo",0],["6w8BIIHTWU0",0]]],["Zurich","Switzerland",[["Va1eX2DjkZk",5],["hXdJmpl_89g",52],["BtDrk65dfnc",94],["bglTELu5a6w",16],["qjoBVu9LXuE",5]]]];
+const ALL = WALKS.flatMap(([city,country,vids])=>vids.map(([id,t])=>({id,t,city,country})));
+let player = null, curVid = null, failStreak = 0;
+
+const sel = $("citySel");
+sel.innerHTML = '<option value="*">Todas las ciudades ('+ALL.length+' caminatas)</option>' +
+  WALKS.map(([c,p,v])=>`<option value="${c}">${c}, ${p} (${v.length})</option>`).join("");
+sel.value = store.get("city") || "*";
+if(!sel.value) sel.value="*";
+sel.onchange = ()=>{ store.set("city", sel.value); randomWalk(); };
+
+function pool(){ return sel.value==="*" ? ALL : ALL.filter(v=>v.city===sel.value); }
+function randomWalk(){
+  const p = pool(); if(!p.length) return;
+  let v; do{ v = p[Math.random()*p.length|0]; } while(p.length>1 && curVid && v.id===curVid.id);
+  playVid(v);
+}
+function playVid(v){
+  curVid = v;
+  $("cityLabel").textContent = v.city ? "Caminando por " + v.city + (v.country?", "+v.country:"") : "Caminata propia";
+  $("ytLink").href = "https://www.youtube.com/watch?v=" + v.id + (v.t?"&t="+v.t:"");
+  $("bokeh").style.display = "none";
+  if(player && player.loadVideoById){ player.loadVideoById({videoId:v.id, startSeconds:v.t||0}); }
+  else if(window.YT && YT.Player){ makePlayer(); }
+}
+function makePlayer(){
+  const wrap=$("ytwrap"); wrap.innerHTML='<div id="yt"></div>';
+  player = new YT.Player("yt", {
+    videoId: curVid.id,
+    playerVars:{autoplay:1, mute:1, controls:0, start:curVid.t||0, rel:0, playsinline:1, iv_load_policy:3, modestbranding:1, disablekb:1},
+    events:{
+      onReady:e=>{ e.target.mute(); e.target.playVideo(); },
+      onStateChange:e=>{
+        if(e.data===YT.PlayerState.PLAYING){ failStreak=0; $("ytMsg").textContent=""; }
+        if(e.data===YT.PlayerState.ENDED) randomWalk();
+      },
+      onError:e=>{
+        failStreak++;
+        if(e.data===153 || failStreak>5){
+          $("ytMsg").innerHTML = location.protocol==="file:"
+            ? '<span class="err">YouTube no permite reproducir videos desde un archivo local. Ábrela desde su link de internet o con abrir_radio.bat.</span>'
+            : '<span class="err">YouTube no está cargando videos ahora. Revisa la conexión y toca "Otra al azar".</span>';
+          $("bokeh").style.display="block"; return;
+        }
+        $("ytMsg").textContent="Ese video ya no está disponible, buscando otro…";
+        setTimeout(randomWalk, 800);
+      }
+    }
+  });
+}
+window.onYouTubeIframeAPIReady = ()=>{ if(curVid) makePlayer(); };
+(function loadYT(){ const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; document.head.appendChild(s); })();
+
+$("nextWalk").onclick = randomWalk;
+$("ytGo").onclick = ()=>{
+  const id = ytId($("ytInput").value);
+  if(!id){ $("ytMsg").innerHTML='<span class="err">No reconozco ese link. Copia la URL completa del video.</span>'; return; }
+  playVid({id, t:0}); $("ytInput").value="";
+};
+$("ytInput").addEventListener("keydown", e=>{ if(e.key==="Enter") $("ytGo").click(); });
+
+/* ---------- Fondo de luces cuando no hay video ---------- */
+(function bokeh(){
+  const c=$("bokeh"), x=c.getContext("2d");
+  const hues=["255,179,71","255,120,90","120,170,255","255,220,160"];
+  let W,H,dots=[];
+  function size(){W=c.width=innerWidth*devicePixelRatio;H=c.height=innerHeight*devicePixelRatio;
+    dots=Array.from({length:55},()=>({x:Math.random()*W,y:H*.35+Math.random()*H*.65,r:(8+Math.random()*40)*devicePixelRatio,v:(.1+Math.random()*.4)*devicePixelRatio,c:hues[Math.random()*4|0],a:.08+Math.random()*.25}))}
+  size(); addEventListener("resize",size);
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  (function frame(){
+    x.fillStyle="#07080b";x.fillRect(0,0,W,H);
+    const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,"#0b0e1a");g.addColorStop(1,"#1a1010");x.fillStyle=g;x.fillRect(0,0,W,H);
+    for(const d of dots){
+      if(!still){d.x-=d.v; if(d.x<-d.r) d.x=W+d.r;}
+      const rg=x.createRadialGradient(d.x,d.y,0,d.x,d.y,d.r);
+      rg.addColorStop(0,`rgba(${d.c},${d.a})`);rg.addColorStop(1,`rgba(${d.c},0)`);
+      x.fillStyle=rg;x.beginPath();x.arc(d.x,d.y,d.r,0,7);x.fill();
+    }
+    if(c.style.display!=="none") requestAnimationFrame(frame); else setTimeout(()=>requestAnimationFrame(frame),1000);
+  })();
+})();
+
+/* ---------- Reloj, pantalla completa, modo inactivo ---------- */
+function tick(){
+  const d=new Date();
+  $("time").textContent=d.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"});
+  $("date").textContent=d.toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"});
+}
+tick(); setInterval(tick,10000);
+
+$("fsBtn").onclick=()=>{
+  if(document.fullscreenElement){ document.exitFullscreen(); return; }
+  document.documentElement.requestFullscreen()
+    .then(()=>screen.orientation && screen.orientation.lock && screen.orientation.lock("landscape").catch(()=>{}))
+    .catch(()=>{});
+};
+
+let idleT;
+function wake(){document.body.classList.remove("idle");clearTimeout(idleT);
+  idleT=setTimeout(()=>{ if(!$("walkPanel").open) document.body.classList.add("idle") },5000)}
+["mousemove","keydown","touchstart"].forEach(e=>addEventListener(e,wake,{passive:true}));
+wake();
+
+addEventListener("keydown",e=>{
+  if(e.target.tagName==="INPUT") return;
+  if(e.code==="Space"){e.preventDefault();$("playBtn").click();}
+  if(e.key==="f") $("fsBtn").click();
+});
+
+/* ---------- Inicio ---------- */
+if("serviceWorker" in navigator && location.protocol==="https:"){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+$("tapzone").addEventListener("click", e=>{ e.preventDefault(); wake(); });
+renderDial();
+randomWalk();
+addEventListener("keydown",e=>{ if(e.target.tagName!=="INPUT" && e.key==="n") randomWalk(); });
+pollNowPlaying();
+</script>
+</body>
+</html>

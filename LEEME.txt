@@ -1,0 +1,31 @@
+RADIO CITY WALK - instalación en celular Samsung y TV LG
+=========================================================
+
+1) SUBIR LA APP A INTERNET (GitHub Pages, gratis; se hace una sola vez)
+   - Entra a https://github.com y crea una cuenta (o inicia sesión).
+   - Botón "New" (nuevo repositorio). Nombre: radio-city-walk. Déjalo "Public". Create repository.
+   - Haz clic en "uploading an existing file" y arrastra TODOS los archivos de esta carpeta
+     (index.html, manifest.webmanifest, sw.js y los .png). Luego "Commit changes".
+   - Ve a Settings > Pages. En "Branch" elige "main" y carpeta "/ (root)". Save.
+   - Espera 1 o 2 minutos. Tu app quedará en:
+       https://TU-USUARIO.github.io/radio-city-walk/
+
+2) INSTALARLA EN EL SAMSUNG
+   - Abre ese link en Chrome (o en Samsung Internet).
+   - Menú (tres puntos) > "Agregar a pantalla de inicio" o "Instalar app".
+   - Aparece el icono "City Walk". Ábrela desde ahí: se ve a pantalla completa y en horizontal.
+
+3) VERLA EN EL TV LG
+   - Celular y TV en la misma red Wi-Fi.
+   - En el Samsung: desliza dos veces desde arriba > "Smart View" > elige tu TV LG.
+   - En el TV acepta la conexión (en LG antiguos, abre primero la app "Screen Share").
+   - Pon el celular en horizontal, abre City Walk y toca play.
+   - La app mantiene la pantalla del celular encendida mientras suena la radio.
+
+CONTROLES
+   - Toca la pantalla para mostrar los controles (se ocultan a los 5 segundos).
+   - "Caminata": elige una ciudad o "Todas", y "Otra al azar" para cambiar.
+   - Si un video ya no existe en YouTube, la app salta sola a otro.
+
+ALTERNATIVA SIN CELULAR
+   - El mismo link funciona en el navegador del TV LG (Web Browser) o en cualquier computador.
